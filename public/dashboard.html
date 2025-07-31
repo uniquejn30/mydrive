@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - MyDrive</title>
+    <link rel="icon" href="/favicon.ico">
+    <link rel="stylesheet" href="style.css">
+</head>
+<style>
+.visually-hidden {
+    position: absolute !important;
+    height: 1px; width: 1px;
+    overflow: hidden;
+    clip: rect(1px, 1px, 1px, 1px);
+    white-space: nowrap;
+}
+</style>
+<body class="dashboard-body">
+    <!-- Dashboard Header -->
+    <header class="dashboard-header">
+        <div class="header-content">
+            <div class="logo-section">
+                <h1 class="dashboard-title"><a href="/">MyDrive</a></h1>
+                <p class="dashboard-subtitle">File Management Dashboard</p>
+            </div>
+            <div class="header-actions">
+                <button id="logoutButton" class="btn btn-secondary">
+                    <span class="btn-icon">⏻</span>
+                    Logout
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Dashboard Content -->
+    <main class="dashboard-main">
+        <!-- Storage Usage Section -->
+        <section class="storage-section">
+            <div class="storage-card">
+                <h2 class="storage-title">Storage Usage</h2>
+                <div class="storage-info">
+                    <span id="storageUsed">0 MB of 1GB used</span>
+                </div>
+                <div class="storage-bar">
+                    <div class="storage-progress" id="storageProgress"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Upload Section -->
+        <section class="upload-section">
+            <div class="upload-card">
+                <h2 class="upload-title">Upload Files</h2>
+                
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-content">
+                        <div class="upload-icon">
+                        <label for="fileInput" class="visually-hidden">Select files to upload</label>
+                        <input type="file" id="fileInput" multiple accept="*/*" title="Select files to upload">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14,2 14,8 20,8"></polyline>
+                                <line x1="12" y1="18" x2="12" y2="12"></line>
+                                <polyline points="9,15 12,12 15,15"></polyline>
+                            </svg>
+                        </div>
+                        <p class="upload-text">Click to upload or drag and drop</p>
+                        <p class="upload-hint">Multiple files supported (max 100MB each)</p>
+                        <input type="file" id="fileInput" multiple accept="*/*">
+                    </div>
+                </div>
+                
+                <div id="uploadStatus" class="upload-status"></div>
+            </div>
+        </section>
+
+        <!-- Files Section -->
+        <section class="files-section">
+            <div class="files-header">
+                <h2>
+                    Your Files
+                </h2>
+                <div class="files-stats">
+                    <span id="filesCount" class="files-count">0 files</span>
+
+                </div>
+            </div>
+            
+            <div class="files-container">
+                <div id="filesList" class="files-grid">
+                    <div class="loading-state">
+                        <div class="loading-spinner"></div>
+                        <p>Loading your files...</p>
+                    </div>
+                </div>
+                
+                <div id="emptyState" class="empty-state hidden">
+                    <div class="empty-icon">📄</div>
+                    <h3>No files yet</h3>
+                    <p>Upload your first file to get started</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const token = localStorage.getItem('token');
+        const fileInput = document.getElementById('fileInput');
+        const filesList = document.getElementById('filesList');
+        const uploadStatus = document.getElementById('uploadStatus');
+        const logoutButton = document.getElementById('logoutButton');
+
+        // Check if user is authenticated
+        if (!token) {
+            window.location.href = 'signIn.html';
+        }
+
+        // Drag and drop functionality
+        const uploadArea = document.getElementById('uploadArea');
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, highlight, false);
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, unhighlight, false);
+        });
+        
+        uploadArea.addEventListener('drop', handleDrop, false);
+        
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        function highlight(e) {
+            uploadArea.classList.add('dragover');
+        }
+        
+        function unhighlight(e) {
+            uploadArea.classList.remove('dragover');
+        }
+        
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            fileInput.files = files;
+            
+            // Trigger the change event to handle upload
+            const event = new Event('change', { bubbles: true });
+            fileInput.dispatchEvent(event);
+        }
+
+        // Handle file selection (click to upload)
+        fileInput.addEventListener('change', async () => {
+            const files = fileInput.files;
+            if (files.length === 0) return;
+
+            uploadStatus.textContent = `Uploading ${files.length} file${files.length > 1 ? 's' : ''}...`;
+            uploadStatus.className = 'upload-status uploading show';
+
+            try {
+                for (let i = 0; i < files.length; i++) {
+                    uploadStatus.textContent = `Uploading ${i + 1} of ${files.length}: ${files[i].name}`;
+                    await uploadFile(files[i]);
+                }
+
+                uploadStatus.textContent = `Successfully uploaded ${files.length} file${files.length > 1 ? 's' : ''}!`;
+                uploadStatus.className = 'upload-status success show';
+                fileInput.value = '';
+                loadFiles();
+                updateStorageUsage();
+                
+                // Hide success message after 3 seconds
+                setTimeout(() => {
+                    uploadStatus.className = 'upload-status';
+                }, 3000);
+            } catch (error) {
+                uploadStatus.textContent = `Upload failed: ${error.message}`;
+                uploadStatus.className = 'upload-status error show';
+            }
+        });
+
+        // Upload single file using presigned URL
+        async function uploadFile(file) {
+            // Step 1: Get presigned URL
+            const uploadResponse = await fetch(`/upload?filename=${encodeURIComponent(file.name)}&contentType=${encodeURIComponent(file.type)}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!uploadResponse.ok) {
+                throw new Error(`Failed to get upload URL for ${file.name}`);
+            }
+
+            const { uploadUrl, key } = await uploadResponse.json();
+
+            // Step 2: Upload to S3 using presigned URL
+            const s3Response = await fetch(uploadUrl, {
+                method: 'PUT',
+                body: file,
+                headers: {
+                    'Content-Type': file.type
+                }
+            });
+
+            if (!s3Response.ok) {
+                throw new Error(`Failed to upload ${file.name} to S3`);
+            }
+
+            // Step 3: Confirm upload and save metadata
+            const confirmResponse = await fetch('/files/confirm', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    filename: file.name,
+                    size: file.size,
+                    key: key
+                })
+            });
+
+            if (!confirmResponse.ok) {
+                throw new Error(`Failed to confirm upload for ${file.name}`);
+            }
+        }
+
+        // Load files list
+        async function loadFiles() {
+            try {
+                const response = await fetch('/files', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch files');
+                }
+
+                const data = await response.json();
+                let files;
+                if (Array.isArray(data)) {
+                    files = data;
+                } else if (data.files && Array.isArray(data.files)) {
+                    files = data.files;
+                } else if (data.data && Array.isArray(data.data)) {
+                    files = data.data;
+                } else {
+                    files = [];
+                }
+                
+                displayFiles(files);
+            } catch (error) {
+                console.error('Error loading files:', error);
+                filesList.innerHTML = '<li>Error loading files: ' + error.message + '</li>';
+            }
+        }
+
+        // Display files in the list
+        function displayFiles(files) {
+            const filesCount = document.getElementById('filesCount');
+            const emptyState = document.getElementById('emptyState');
+            
+            // Ensure files is an array
+            if (!Array.isArray(files)) {
+                console.error('Files is not an array:', files);
+                filesList.innerHTML = '<div class="error-state"><p>Error loading files</p></div>';
+                filesCount.textContent = '0 files';
+                return;
+            }
+
+            // Update files count
+            filesCount.textContent = `${files.length} file${files.length !== 1 ? 's' : ''}`;
+
+            if (files.length === 0) {
+                filesList.style.display = 'none';
+                emptyState.style.display = 'block';
+                return;
+            }
+
+            filesList.style.display = 'grid';
+            emptyState.style.display = 'none';
+            console.log(files)
+
+            filesList.innerHTML = files.map(file => {
+                const uploadDate = file.uploadedAt ? new Date(file.uploadedAt).toLocaleDateString() : 'Unknown';
+                const fileUrl = `https://myoneclouddrive.s3.ap-south-1.amazonaws.com/${file.key || ''}`;
+                const fileName = file.name || 'Unknown file';
+                const fileExtension = getFileExtension(fileName);
+                
+                return `
+                    <div class="file-card">
+                        <div class="file-preview">
+                            ${generateFilePreview(fileUrl, fileName, fileExtension)}
+                        </div>
+                        <div class="file-info">
+                            <h3 class="file-name" title="${fileName}">${fileName}</h3>
+                            <div class="file-meta">
+                                <span class="file-size">${file.size ? formatFileSize(file.size) : 'Unknown size'}</span>
+                                <span class="file-date">${uploadDate}</span>
+                            </div>
+                        </div>
+                        <div class="file-actions">
+                            <button class="btn btn-sm btn-primary" onclick="downloadFile('${file.key || ''}')" title="Download file">
+                                Download
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteFile('${file.id || ''}')" title="Delete file">
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Get file extension
+        function getFileExtension(filename) {
+            return filename.split('.').pop().toLowerCase();
+        }
+
+        // Generate file preview based on file type
+        function generateFilePreview(fileUrl, fileName, extension) {
+            const imageTypes = ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'bmp'];
+            const videoTypes = ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'webm', 'ogg'];
+            const audioTypes = ['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a'];
+            const pdfTypes = ['pdf'];
+            
+            if (imageTypes.includes(extension)) {
+                return `
+                    <img src="${fileUrl}" alt="${fileName}" class="preview-image" 
+                         onload="this.classList.add('loaded')"
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    <div class="preview-fallback" style="display: none;">
+                        <span class="preview-icon">🖼️</span>
+                        <span class="preview-text">Image</span>
+                    </div>
+                `;
+            } else if (videoTypes.includes(extension)) {
+                return `
+                    <video class="preview-video" preload="metadata" muted>
+                        <source src="${fileUrl}#t=1" type="video/${extension}">
+                    </video>
+                    <div class="preview-overlay">
+                        <span class="preview-icon">▶️</span>
+                        <span class="preview-text">Video</span>
+                    </div>
+                `;
+            } else if (audioTypes.includes(extension)) {
+                return `
+                    <div class="preview-fallback audio-preview">
+                        <span class="preview-icon">🎵</span>
+                        <span class="preview-text">Audio</span>
+                        <div class="audio-waveform">
+                            <div class="wave-bar"></div>
+                            <div class="wave-bar"></div>
+                            <div class="wave-bar"></div>
+                            <div class="wave-bar"></div>
+                            <div class="wave-bar"></div>
+                        </div>
+                    </div>
+                `;
+            } else if (pdfTypes.includes(extension)) {
+                return `
+                    <div class="preview-fallback pdf-preview">
+                        <span class="preview-icon">📄</span>
+                        <span class="preview-text">PDF Document</span>
+                    </div>
+                `;
+            } else {
+                // Default fallback for other file types
+                const fileTypeMap = {
+                    'doc': 'Document', 'docx': 'Document', 'txt': 'Text File', 'rtf': 'Rich Text',
+                    'xls': 'Spreadsheet', 'xlsx': 'Spreadsheet', 'csv': 'Spreadsheet',
+                    'ppt': 'Presentation', 'pptx': 'Presentation',
+                    'zip': 'Archive', 'rar': 'Archive', '7z': 'Archive', 'tar': 'Archive', 'gz': 'Archive',
+                    'js': 'JavaScript', 'html': 'HTML', 'css': 'CSS', 'py': 'Python', 'java': 'Java',
+                    'json': 'JSON', 'xml': 'XML', 'yml': 'YAML', 'yaml': 'YAML'
+                };
+                
+                const fileType = fileTypeMap[extension] || 'File';
+                return `
+                    <div class="preview-fallback">
+                        <span class="preview-icon">📄</span>
+                        <span class="preview-text">${fileType}</span>
+                    </div>
+                `;
+            }
+        }
+
+        // Format file size
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Delete file
+        async function deleteFile(fileId) {
+            if (!confirm('Are you sure you want to delete this file?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/files/${fileId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to delete file');
+                }
+
+                loadFiles();
+                updateStorageUsage();
+            } catch (error) {
+                alert('Delete failed: ' + error.message);
+            }
+        }
+
+        // Download file
+        function downloadFile(key) {
+            window.open(`https://myoneclouddrive.s3.ap-south-1.amazonaws.com/${key}`);
+        }
+
+
+
+        // Logout
+        logoutButton.addEventListener('click', () => {
+            localStorage.removeItem('token');
+            window.location.href = 'signIn.html';
+        });
+
+        // Storage usage calculation
+        function updateStorageUsage() {
+            // This would typically come from your backend
+            // For now, we'll calculate from the current files list
+            fetch('/files', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                let files = [];
+                if (Array.isArray(data)) {
+                    files = data;
+                } else if (data.files && Array.isArray(data.files)) {
+                    files = data.files;
+                } else if (data.data && Array.isArray(data.data)) {
+                    files = data.data;
+                }
+                
+                const totalSize = files.reduce((sum, file) => sum + (file.size || 0), 0);
+                const totalSizeGB = 1; // 1GB limit
+                const usedSizeMB = (totalSize / (1024 * 1024)).toFixed(1);
+                const usagePercentage = (totalSize / (totalSizeGB * 1024 * 1024 * 1024)) * 100;
+                
+                document.getElementById('storageUsed').textContent = `${usedSizeMB} MB of ${totalSizeGB}GB used`;
+                document.getElementById('storageProgress').style.width = `${Math.min(usagePercentage, 100)}%`;
+            })
+            .catch(error => {
+                console.error('Error calculating storage usage:', error);
+            });
+        }
+
+        // Load files and storage usage on page load
+        loadFiles();
+        updateStorageUsage();
+    </script>
+</body>
+</html>
