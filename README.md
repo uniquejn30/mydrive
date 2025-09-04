@@ -73,13 +73,11 @@ docker push uniquejn30/mydrive:tagname
 ## Screenshots
 | Operation                     | Screenshot                                |
 |------------------------------|--------------------------------------------|
-| ✅ About US        | ![Weather](Screenshots/Screenshot%20(65).png) |
-| ✅ Home             | ![Weather](Screenshots/Screenshot%20(66).png) |
-| ✅ Submit Feedback            | ![Error](Screenshots/Screenshot%20(67).png) |
-| ✅ All Feedback          | ![Error](Screenshots/Screenshot%20(68).png) |
-| ✅ Reviewed Feedback         | ![Error](Screenshots/Screenshot%20(69).png) |
-| ✅ Feedback deleted              | ![Upload](Screenshots/Screenshot%20(70).png) |
-| ✅ Logout           | ![Weather](Screenshots/Screenshot%20(64).png) |
+| ✅ Home             | ![Weather](Screenshots/01_Home_Page.png) |
+| ✅ Signup            | ![Error](Screenshots/02_Signup_Page.png) |
+| ✅ Dashboard          | ![Error](Screenshots/03_Dashboard_Page.png) |
+| ✅ Upload Files         | ![Error](Screenshots/04_Upload_file.png) |
+| ✅ Download & deleted files             | ![Upload](Screenshots/05_Download & Delete file.png) |
 
 ## Contributing
 
